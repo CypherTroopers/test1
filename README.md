@@ -10,23 +10,20 @@ sudo apt install ufw git nano -y
 command -v rsync >/dev/null 2>&1 || sudo apt install -y rsync
 
 sudo ufw allow 22/tcp
-sudo ufw allow 22/udp
 sudo ufw allow 8000/tcp
-sudo ufw allow 8000/udp
 sudo ufw allow 6000/tcp
 sudo ufw allow 6000/udp
-sudo ufw allow 9090/tcp
-sudo ufw allow 9090/udp
 sudo ufw allow 7100/tcp
 sudo ufw allow 7100/udp
+sudo ufw allow 7002/tcp
+sudo ufw allow 7002/udp
 sudo ufw allow 30303/tcp
 sudo ufw allow 30303/udp
-sudo ufw allow 30301/tcp
-sudo ufw allow 30301/udp
+sudo ufw allow 8546/tcp
+sudo ufw allow 9090/tcp
+sudo ufw allow 9090/udp
 sudo ufw allow 9600/tcp
 sudo ufw allow 9600/udp
-sudo ufw allow 8546/tcp
-sudo ufw allow 8546/udp
 
 yes | sudo ufw enable
 sudo ufw status numbered
