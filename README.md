@@ -180,7 +180,6 @@ pm2 startup
 pm2 save
 
 EOF
-```
-
 chmod +x setup_cypherium.sh
 ./setup_cypherium.sh
+```
