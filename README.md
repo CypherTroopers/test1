@@ -19,6 +19,8 @@ sudo ufw allow 7002/tcp
 sudo ufw allow 7002/udp
 sudo ufw allow 30303/tcp
 sudo ufw allow 30303/udp
+sudo ufw allow 30301/udp
+sudo ufw allow 30301/tcp
 sudo ufw allow 8546/tcp
 sudo ufw allow 9090/tcp
 sudo ufw allow 9090/udp
