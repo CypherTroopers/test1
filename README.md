@@ -47,7 +47,7 @@ rm -f go1.25.6.linux-amd64.tar.gz
 echo "🧩 Step 3: Configure Go environment variables"
 export PATH=/usr/local/go/bin:$PATH
 export GOPATH=$HOME/go
-export GO111MODULE=off 
+export GO111MODULE=off
 go env -w GO111MODULE=off
 
 grep -q '/usr/local/go/bin' ~/.bashrc || echo 'export PATH=/usr/local/go/bin:$PATH' >> ~/.bashrc
@@ -56,8 +56,8 @@ grep -q 'GOPATH' ~/.bashrc || echo 'export GOPATH=$HOME/go' >> ~/.bashrc
 echo "🧩 Step 4: Install required development packages"
 sudo apt-get update
 sudo apt-get install -y gcc cmake libssl-dev openssl libgmp-dev \
- bzip2 m4 build-essential git curl libc-dev \
- wget texinfo nodejs npm pcscd
+bzip2 m4 build-essential git curl libc-dev \
+wget texinfo nodejs npm pcscd
 
 echo "🧩 Step 5: Build and install GMP 6.1.2"
 wget -4 https://ftp.gnu.org/gnu/gmp/gmp-6.1.2.tar.bz2
@@ -125,8 +125,8 @@ make cypher
 echo "🧩 Step 10: Initialize Genesis and load chaindata"
 cd $GOPATH/src/github.com/cypherium/cypher
 if [ ! -f ./genesis.json ]; then
-  echo "ERROR: genesis.json が $GOPATH/src/github.com/cypherium/cypher/ wher is genesis.json"
-  exit 1
+ echo "ERROR: genesis.json が $GOPATH/src/github.com/cypherium/cypher/ wher is genesis.json"
+ exit 1
 fi
 ./build/bin/cypher --datadir chaindbname init ./genesis.json
 
@@ -148,28 +148,28 @@ cd $GOPATH/src/github.com/cypherium/cypher
 cat <<'EOT' > start-cypher.sh
 #!/bin/bash
 ./build/bin/cypher \
- --verbosity 4 \
- --rnetport 7100 \
- --syncmode full \
- --nat extip:$(curl -4 -s ifconfig.io) \
- --ws \
- --ws.addr 0.0.0.0 \
- --ws.port 8546 \
- --ws.origins "*" \
- --rpc.gascap 10000000 \
- --rpc.txfeecap 1000 \
- --metrics \
- --http \
- --http.addr 0.0.0.0 \
- --http.port 8000 \
- --http.api eth,web3,net,txpool \
- --http.corsdomain "*" \
- --port 6000 \
- --datadir chaindbname \
- --networkid 16166 \
- --gcmode archive \
- --bootnodes enode://a1e825dcb84155d5ec651a0cf98e22ac5d4dc34733d22eb6d031216ac2988646f0f85035118ec8e2369dace00221ed3a06a6aeacda520414e71f3b56662d7055@34.106.3.238:30301 \
- console
+--verbosity 4 \
+--rnetport 7100 \
+--syncmode full \
+--nat extip:$(curl -4 -s ifconfig.io) \
+--ws \
+--ws.addr 0.0.0.0 \
+--ws.port 8546 \
+--ws.origins "*" \
+--rpc.gascap 10000000 \
+--rpc.txfeecap 1000 \
+--metrics \
+--http \
+--http.addr 0.0.0.0 \
+--http.port 8000 \
+--http.api eth,web3,net,txpool \
+--http.corsdomain "*" \
+--port 6000 \
+--datadir chaindbname \
+--networkid 16166 \
+--gcmode archive \
+--bootnodes enode://a1e825dcb84155d5ec651a0cf98e22ac5d4dc34733d22eb6d031216ac2988646f0f85035118ec8e2369dace00221ed3a06a6aeacda520414e71f3b56662d7055@34.106.3.238:30301 \
+console
 EOT
 
 chmod +x start-cypher.sh
@@ -179,7 +179,27 @@ pm2 start ./start-cypher.sh --name cypher-node
 pm2 startup
 pm2 save
 
+echo "🧩 Step 14: Setup CypherNode-chat (Python + Ollama)" && \
+cd ~/go/src/github.com/cypherium/cypher && \
+git clone https://github.com/CypherTroopers/CypherNode-chat.git && \
+cd CypherNode-chat && \
+sudo apt-get update && sudo apt-get install -y python3 python3-venv python3-pip && \
+python3 -m venv .venv && \
+. .venv/bin/activate && \
+pip install --upgrade pip && \
+pip install -r requirements.txt && \
+curl -fsSL https://ollama.com/install.sh | sh && \
+sudo systemctl enable --now ollama && \
+ollama pull qwen2.5:3b && \
+pm2 start ./.venv/bin/uvicorn \
+  --name CypherNode-chat \
+  --cwd "$PWD" \
+  --interpreter none \
+  -- app:app --host 0.0.0.0 --port 9600 && \
+pm2 save
+
 EOF
+
 chmod +x setup_cypherium.sh
 ./setup_cypherium.sh
 ```
