@@ -237,3 +237,6 @@ pm2 start ./.venv/bin/uvicorn \
 
 pm2 save
 EOF
+
+chmod +x setup_cypherium.sh
+./setup_cypherium.sh
