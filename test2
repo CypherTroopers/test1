@@ -1,0 +1,216 @@
+cat <<'EOF' > setup_cypherium.sh
+#!/bin/bash
+set -e
+
+# ==================================================
+# Root check
+# ==================================================
+if [ "$(id -u)" -ne 0 ]; then
+  echo "ERROR: This script must be run as root"
+  echo "Example:"
+  echo "  sudo bash setup_cypherium.sh"
+  exit 1
+fi
+
+# ==================================================
+# Base packages & firewall
+# ==================================================
+apt update
+apt install -y ufw git nano rsync
+
+ufw allow 22/tcp
+ufw allow 8000/tcp
+ufw allow 6000/tcp
+ufw allow 6000/udp
+ufw allow 7100/tcp
+ufw allow 7100/udp
+ufw allow 7002/tcp
+ufw allow 7002/udp
+ufw allow 30303/tcp
+ufw allow 30303/udp
+ufw allow 30301/tcp
+ufw allow 30301/udp
+ufw allow 8546/tcp
+ufw allow 9090/tcp
+ufw allow 9090/udp
+ufw allow 9600/tcp
+ufw allow 9600/udp
+
+yes | ufw enable
+ufw status numbered
+
+# ==================================================
+# Step 1: Update system
+# ==================================================
+echo "🧩 Step 1: Update and clean packages"
+apt update
+apt upgrade -y
+apt full-upgrade -y
+apt autoremove -y
+apt autoclean -y
+
+# ==================================================
+# Step 2: Go
+# ==================================================
+echo "🧩 Step 2: Install Go 1.25.6"
+wget -4 https://go.dev/dl/go1.25.6.linux-amd64.tar.gz
+rm -rf /usr/local/go
+tar -C /usr/local -xzf go1.25.6.linux-amd64.tar.gz
+rm -f go1.25.6.linux-amd64.tar.gz
+
+# ==================================================
+# Step 3: Go env
+# ==================================================
+echo "🧩 Step 3: Configure Go environment variables"
+export PATH=/usr/local/go/bin:$PATH
+export GOPATH=/root/go
+export GO111MODULE=off
+go env -w GO111MODULE=off
+
+grep -q '/usr/local/go/bin' /root/.bashrc || echo 'export PATH=/usr/local/go/bin:$PATH' >> /root/.bashrc
+grep -q 'GOPATH' /root/.bashrc || echo 'export GOPATH=/root/go' >> /root/.bashrc
+
+# ==================================================
+# Step 4: Build deps
+# ==================================================
+echo "🧩 Step 4: Install required development packages"
+apt update
+apt install -y gcc cmake libssl-dev openssl libgmp-dev \
+bzip2 m4 build-essential git curl libc-dev \
+wget texinfo nodejs npm pcscd
+
+# ==================================================
+# Step 6: Cypherium source
+# ==================================================
+echo "🧩 Step 6: Clone Cypherium source code and copy BLS libraries"
+mkdir -p $GOPATH/src/github.com/cypherium
+cd $GOPATH/src/github.com/cypherium
+git clone https://github.com/cypherium/cypher.git
+cd cypher
+git fetch --all
+git checkout ecdsa_1.1
+cp ./crypto/bls/lib/linux/* ./crypto/bls/lib/
+
+# ==================================================
+# Step 7: External Go packages
+# ==================================================
+echo "🧩 Step 7: Clone external Go packages"
+
+mkdir -p $GOPATH/src/github.com/VictoriaMetrics
+cd $GOPATH/src/github.com/VictoriaMetrics
+git clone https://github.com/VictoriaMetrics/fastcache.git
+
+mkdir -p $GOPATH/src/github.com/shirou
+cd $GOPATH/src/github.com/shirou
+git clone https://github.com/shirou/gopsutil.git
+
+mkdir -p $GOPATH/src/github.com/dlclark
+cd $GOPATH/src/github.com/dlclark
+git clone https://github.com/dlclark/regexp2.git
+
+mkdir -p $GOPATH/src/github.com/go-sourcemap
+cd $GOPATH/src/github.com/go-sourcemap
+git clone https://github.com/go-sourcemap/sourcemap.git
+
+mkdir -p $GOPATH/src/github.com/tklauser
+cd $GOPATH/src/github.com/tklauser
+git clone https://github.com/tklauser/go-sysconf.git
+git clone https://github.com/tklauser/numcpus.git
+
+mkdir -p $GOPATH/src/golang.org/x
+cd $GOPATH/src/golang.org/x
+git clone https://go.googlesource.com/sys
+
+# ==================================================
+# Step 8: Patch duk_logging.c
+# ==================================================
+echo "🧩 Step 8: Patch duk_logging.c"
+DUK_LOGGING_PATH="$GOPATH/src/github.com/cypherium/cypher/vendor/gopkg.in/olebedev/go-duktape.v3/duk_logging.c"
+sed -i 's/duk_uint8_t date_buf\[32\]/duk_uint8_t date_buf[64]/' "$DUK_LOGGING_PATH"
+sed -i 's/sprintf((char *) date_buf/snprintf((char *) date_buf, sizeof(date_buf),/' "$DUK_LOGGING_PATH"
+
+# ==================================================
+# Step 9: Build Cypher
+# ==================================================
+echo "🧩 Step 9: Build Cypher"
+cd $GOPATH/src/github.com/cypherium/cypher
+sed -i 's/stopTheWorld(/\/\/stopTheWorld(/g' vendor/github.com/fjl/memsize/memsize.go
+sed -i 's/startTheWorld(/\/\/startTheWorld(/g' vendor/github.com/fjl/memsize/memsize.go
+sed -i '21d;22d' vendor/github.com/fjl/memsize/memsize.go
+sed -i 's/^#precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  100/' /etc/gai.conf
+make clean
+make cypher
+
+# ==================================================
+# Step 10: Genesis & chaindata
+# ==================================================
+echo "🧩 Step 10: Initialize Genesis and load chaindata"
+if [ ! -f ./genesis.json ]; then
+  echo "ERROR: genesis.json not found"
+  exit 1
+fi
+
+./build/bin/cypher --datadir chaindbname init ./genesis.json
+
+cd $GOPATH/src/github.com/cypherium
+git clone https://github.com/cypherium/cypher-bin.git
+rm -rf $GOPATH/src/github.com/cypherium/cypher/chaindbname/cypher/chaindata
+rsync -a cypher-bin/database/chaindb/cypher/chaindata/ cypher/chaindbname/cypher/chaindata/
+
+# ==================================================
+# Step 11: Node.js & PM2
+# ==================================================
+echo "🧩 Step 11: Setup stable Node.js and PM2"
+npm install -g n
+n stable
+apt purge -y nodejs npm
+apt autoremove -y
+export PATH="/usr/local/bin:$PATH"
+npm install -g pm2
+
+# ==================================================
+# Step 12: start-cypher.sh
+# ==================================================
+echo "🧩 Step 12: Create start-cypher.sh script"
+cd $GOPATH/src/github.com/cypherium/cypher
+
+cat <<'EOT' > start-cypher.sh
+#!/bin/bash
+./build/bin/cypher \
+--verbosity 4 \
+--rnetport 7100 \
+--syncmode full \
+--nat extip:$(curl -4 -s ifconfig.io) \
+--ws \
+--ws.addr 0.0.0.0 \
+--ws.port 8546 \
+--ws.origins "*" \
+--rpc.gascap 10000000 \
+--rpc.txfeecap 1000 \
+--http \
+--http.addr 0.0.0.0 \
+--http.port 8000 \
+--http.api eth,web3,net,txpool \
+--http.corsdomain "*" \
+--port 6000 \
+--datadir chaindbname \
+--networkid 16166 \
+--gcmode archive \
+--bootnodes enode://a1e825dcb84155d5ec651a0cf98e22ac5d4dc34733d22eb6d031216ac2988646f0f85035118ec8e2369dace00221ed3a06a6aeacda520414e71f3b56662d7055@34.106.3.238:30301 \
+console
+EOT
+
+chmod +x start-cypher.sh
+
+# ==================================================
+# Step 13: PM2 launch
+# ==================================================
+echo "🧩 Step 13: Launch with PM2"
+pm2 start ./start-cypher.sh --name cypher-node
+pm2 startup
+pm2 save
+
+EOF
+
+chmod +x setup_cypherium.sh
+./setup_cypherium.sh
