@@ -248,25 +248,30 @@ pm2 save
 # ==================================================
 # Step 12.5: Mining setup (run while node is up)
 # ==================================================
-echo "🧩 Step 12.5: Create & run mining-setup.sh (requires node IPC)"
-
 cd /root
 
 cat > mining-setup.sh <<'EOT'
 #!/bin/bash
 set -euo pipefail
 
+# Resolve GOPATH safely
 GOPATH="${GOPATH:-$(go env GOPATH 2>/dev/null || true)}"
-[[ -n "${GOPATH}" ]] || GOPATH="/root/go"
+if [[ -z "${GOPATH}" ]]; then
+  GOPATH="/root/go"
+fi
 
 CY_DIR="$GOPATH/src/github.com/cypherium/cypher"
 IPC="$CY_DIR/chaindbname/cypher.ipc"
 
-[[ -d "$CY_DIR" ]] || { echo "[ERR] cypher dir not found: $CY_DIR"; exit 1; }
+if [[ ! -d "$CY_DIR" ]]; then
+  echo "[ERR] cypher dir not found: $CY_DIR"
+  exit 1
+fi
 
 if [[ ! -S "$IPC" ]]; then
   echo "[ERR] IPC not found: $IPC"
   echo "      Node running? pm2 status"
+  echo "      Datadir matches? start-cypher.sh: --datadir chaindbname"
   exit 1
 fi
 
@@ -275,22 +280,31 @@ cd "$CY_DIR"
 read -rsp "Set NEW account password: " PASS; echo
 read -rp  "Etherbase address (blank = use new account): " EBASE
 
+# 1) Create new account (Ed25519)
 ADDR_RAW="$(./build/bin/cypher attach "ipc:${IPC}" --exec "personal.newAccountEd25519(\"${PASS}\")" 2>&1 || true)"
+
+# sanitize output safely (remove quotes + spaces + newlines)
 ADDR="$(printf "%s" "$ADDR_RAW" | sed -E 's/^"|"$//g' | tr -d '[:space:]')"
 
 if [[ -z "$ADDR" ]] || [[ "$ADDR" == *"error"* ]] || [[ "$ADDR" == *"Error"* ]]; then
   echo "[ERR] Failed to create account."
+  echo "Output:"
   echo "$ADDR_RAW"
   exit 1
 fi
 
 echo "[OK] New account: $ADDR"
 
+# 2) Start mining (your node's custom signature)
 OUT_START="$(./build/bin/cypher attach "ipc:${IPC}" --exec "miner.start(1, \"${ADDR}\", \"${PASS}\")" 2>&1 || true)"
 echo "[OK] miner.start issued"
 echo "$OUT_START" | sed -E 's/^/[cypher] /'
 
-[[ -n "$EBASE" ]] || EBASE="$ADDR"
+# 3) Set etherbase (if blank, set to new account)
+if [[ -z "$EBASE" ]]; then
+  EBASE="$ADDR"
+fi
+
 OUT_EB="$(./build/bin/cypher attach "ipc:${IPC}" --exec "miner.setEtherbase(\"${EBASE}\")" 2>&1 || true)"
 echo "[OK] miner.setEtherbase issued: $EBASE"
 echo "$OUT_EB" | sed -E 's/^/[cypher] /'
@@ -302,28 +316,7 @@ echo "  > eth.coinbase"
 echo "  > miner.hashrate"
 EOT
 
-chmod +x /root/mining-setup.sh
-
-# Wait for IPC (node may take a bit to create it)
-GOPATH="${GOPATH:-/root/go}"
-IPC="$GOPATH/src/github.com/cypherium/cypher/chaindbname/cypher.ipc"
-
-echo "Waiting for IPC: $IPC"
-for i in $(seq 1 60); do
-  if [ -S "$IPC" ]; then
-    echo "IPC is ready."
-    break
-  fi
-  sleep 1
-done
-
-if [ ! -S "$IPC" ]; then
-  echo "[WARN] IPC still not found. You can run later:"
-  echo "  cd /root && ./mining-setup.sh"
-else
-  # Run now (interactive)
-  ./mining-setup.sh
-fi
+chmod +x mining-setup.sh
 # ==================================================
 # Step 13: CypherNode-chat (Python + Ollama)
 # ==================================================
