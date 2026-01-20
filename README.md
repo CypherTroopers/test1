@@ -58,19 +58,6 @@ sudo apt-get install -y gcc cmake libssl-dev openssl libgmp-dev \
 bzip2 m4 build-essential git curl libc-dev \
 wget texinfo nodejs npm pcscd
 
-echo "🧩 Step 5: Build and install GMP 6.1.2"
-wget -4 https://ftp.gnu.org/gnu/gmp/gmp-6.1.2.tar.bz2
-tar -xjf gmp-6.1.2.tar.bz2
-cd gmp-6.1.2
-./configure --prefix=/usr --enable-cxx --disable-static --docdir=/usr/share/doc/gmp-6.1.2
-make
-make check || echo "※ Some tests may fail and can be ignored."
-make html
-sudo make install
-sudo make install-html
-cd ..
-sudo cp -rf /usr/lib/libgmp* /usr/local/lib/
-
 echo "🧩 Step 6: Clone Cypherium source code and copy BLS libraries"
 mkdir -p $GOPATH/src/github.com/cypherium
 cd $GOPATH/src/github.com/cypherium
