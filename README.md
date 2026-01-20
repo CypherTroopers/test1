@@ -144,7 +144,6 @@ cat <<'EOT' > start-cypher.sh
 --ws.origins "*" \
 --rpc.gascap 10000000 \
 --rpc.txfeecap 1000 \
---metrics \
 --http \
 --http.addr 0.0.0.0 \
 --http.port 8000 \
